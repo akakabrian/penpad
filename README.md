@@ -112,7 +112,7 @@ per row), and the PWA installed on the iOS home screen.
 ## Quick start
 
 ```sh
-git clone <your-fork> ~/penpad
+git clone https://github.com/akakabrian/penpad.git ~/penpad
 cd ~/penpad
 python3 penpad.py
 ```

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=penpad Widget
+Comment=Pinned penpad on the desktop
+Exec=python3 %h/penpad/widget.py
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=4
+NoDisplay=false
+Categories=Utility;

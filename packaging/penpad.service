@@ -1,0 +1,15 @@
+[Unit]
+Description=penpad — shared notes + file drop server
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/penpad/penpad.py
+WorkingDirectory=%h/penpad
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:%h/penpad/penpad.log
+StandardError=append:%h/penpad/penpad.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+# Runtime data — these live alongside the code but are not source
+penpad.txt
+penpad.log
+notepad.txt
+notepad.log
+*.bak
+files/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store

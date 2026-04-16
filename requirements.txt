@@ -1,0 +1,6 @@
+# Server (penpad.py): stdlib only, no requirements.
+# Widget (widget.py): system packages — python3-gi, gir1.2-gtk-3.0, gir1.2-webkit2-4.1
+# TUI (tui.py): install the packages below.
+
+textual>=0.80
+httpx>=0.27

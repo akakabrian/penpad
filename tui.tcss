@@ -1,0 +1,203 @@
+/* penpad tui — warm dark, single tan accent, one yellow primary action */
+
+$bg: #0e0e10;
+$surface: #16161a;
+$surface-2: #1c1c22;
+$border: #24242a;
+$border-subtle: #1a1a1f;
+$text: #e6e3dc;
+$text-muted: #7a7872;
+$text-dim: #4d4c47;
+$accent: #d4a373;
+$accent-soft: rgba(212, 163, 115, 0.10);
+$primary: #f5c842;
+$ok: #7fb069;
+$warn: #d4a373;
+$err: #c97064;
+
+Screen {
+    background: $bg;
+    color: $text;
+    layers: base toast;
+}
+
+#title-bar {
+    dock: top;
+    height: 1;
+    background: $bg;
+    color: $text-muted;
+    padding: 0 2;
+    layout: horizontal;
+}
+
+#title {
+    width: 1fr;
+    color: $text-muted;
+}
+
+#status {
+    width: auto;
+    color: $text-muted;
+}
+
+#status.-ok { color: $ok; }
+#status.-warn { color: $accent; }
+#status.-err { color: $err; }
+
+#root {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#pad-wrap {
+    width: 2fr;
+    padding: 1 2;
+    border-right: vkey $border-subtle;
+}
+
+#pad {
+    background: $bg;
+    color: $text;
+    border: none;
+    padding: 1 2;
+    height: 1fr;
+}
+
+#pad:focus {
+    border: none;
+}
+
+#files-wrap {
+    width: 1fr;
+    layout: vertical;
+    padding: 1 1 0 1;
+    min-width: 28;
+}
+
+#files-head {
+    height: 1;
+    padding: 0 1;
+    color: $text-dim;
+    text-style: none;
+}
+
+#filter {
+    height: 3;
+    background: $surface;
+    border: tall $border-subtle;
+    color: $text;
+    padding: 0 1;
+    margin: 1 0;
+}
+
+#filter.hidden { display: none; }
+
+#files-list {
+    height: 1fr;
+    background: $bg;
+    scrollbar-size: 1 1;
+    scrollbar-color: $border $bg;
+    scrollbar-background: $bg;
+    border: none;
+    padding: 0 1;
+}
+
+#files-list > .option-list--option {
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#files-list > .option-list--option-highlighted {
+    background: $surface-2;
+    color: $text;
+}
+
+#files-list:focus > .option-list--option-highlighted {
+    background: $accent-soft;
+    color: $text;
+}
+
+#preview {
+    height: 14;
+    background: $surface;
+    border: tall $border-subtle;
+    padding: 1 2;
+    color: $text-muted;
+    margin: 1 0 0 0;
+    overflow-y: auto;
+}
+
+#preview-title {
+    color: $text;
+    text-style: bold;
+}
+
+#preview-meta {
+    color: $text-dim;
+    margin-bottom: 1;
+}
+
+#toast {
+    layer: toast;
+    dock: bottom;
+    height: auto;
+    max-height: 5;
+    background: $surface-2;
+    color: $text;
+    border: tall $accent;
+    padding: 0 2;
+    margin: 0 2 1 2;
+    display: none;
+}
+
+#toast.-show { display: block; }
+
+#toast .key {
+    color: $primary;
+    text-style: bold;
+}
+
+Footer {
+    background: $bg;
+    color: $text-dim;
+    padding: 0 2;
+}
+
+Footer > .footer--key {
+    background: $bg;
+    color: $accent;
+}
+
+Footer > .footer--description {
+    background: $bg;
+    color: $text-muted;
+}
+
+.hidden { display: none; }
+
+.dirty {
+    color: $accent;
+}
+
+/* Narrow layout: terminals under NARROW_BREAKPOINT cols — stack the
+   pad above the files panel instead of side-by-side. */
+Screen.narrow #root {
+    layout: vertical;
+}
+
+Screen.narrow #pad-wrap {
+    width: 100%;
+    height: 2fr;
+    border-right: none;
+    border-bottom: hkey $border-subtle;
+}
+
+Screen.narrow #files-wrap {
+    width: 100%;
+    height: 1fr;
+    min-width: 0;
+}
+
+Screen.narrow #preview {
+    height: 8;
+}

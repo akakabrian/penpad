@@ -273,6 +273,26 @@ PAGE = r"""<!doctype html>
   }
   #fstatus:empty { display: none; }
 
+  /* Upload progress bar — shown inline in the bottom bar during a PUT.
+     Fills left-to-right in the tan accent; auto-hides when idle. */
+  #upprogress {
+    flex: 0 0 auto;
+    width: 120px;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--border);
+    position: relative;
+  }
+  #upprogress .fill {
+    position: absolute; inset: 0 auto 0 0;
+    width: 0%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+    transition: width 0.18s ease;
+  }
+  #upprogress.hidden { display: none; }
+
   #filter-row {
     flex: 0 0 auto;
     margin: 0 14px 8px;
@@ -673,6 +693,7 @@ PAGE = r"""<!doctype html>
     <span class="drop-hint">or drop</span>
     <input id="picker" type="file" multiple>
     <span id="fstatus"></span>
+    <div id="upprogress" class="hidden" aria-hidden="true"><div class="fill"></div></div>
   </div>
   <span id="counter"></span>
   <span id="status">connecting</span>
@@ -1163,7 +1184,20 @@ async function downloadFile(it, btn){
 }
 
 const flashNames = new Set();
-function uploadOne(f){
+const upprog = document.getElementById('upprogress');
+const upfill = upprog.querySelector('.fill');
+
+function setProgress(pct){
+  if (pct == null) {
+    upprog.classList.add('hidden');
+    upfill.style.width = '0%';
+    return;
+  }
+  upprog.classList.remove('hidden');
+  upfill.style.width = pct + '%';
+}
+
+function uploadOne(f, onTotalProgress){
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', '/files/' + encodeURIComponent(f.name));
@@ -1171,6 +1205,7 @@ function uploadOne(f){
       if (!e.lengthComputable) return;
       const pct = Math.round(100 * e.loaded / e.total);
       setF('uploading ' + f.name + ' · ' + pct + '%', 'warn');
+      if (onTotalProgress) onTotalProgress(e.loaded, e.total);
     };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
       ? resolve()
@@ -1182,16 +1217,29 @@ function uploadOne(f){
 
 async function uploadFiles(files){
   let ok = 0, fail = 0;
+  // Compute overall total so the bar tracks the batch, not per-file.
+  const totalBytes = files.reduce((n, f) => n + (f.size || 0), 0);
+  let sentBefore = 0;
+  setProgress(0);
   for (const f of files){
     setF('uploading ' + f.name, 'warn');
     try {
-      await uploadOne(f);
+      await uploadOne(f, (loaded, total) => {
+        const pct = totalBytes
+          ? Math.min(100, Math.round(100 * (sentBefore + loaded) / totalBytes))
+          : null;
+        if (pct != null) setProgress(pct);
+      });
+      sentBefore += f.size || 0;
       flashNames.add(f.name);
       ok++;
     } catch(e){
       fail++;
     }
   }
+  // Brief settle at 100% so the fill is visible on small files, then hide.
+  setProgress(100);
+  setTimeout(() => setProgress(null), 500);
   if (fail) setF(`uploaded ${ok} · ${fail} failed`, fail === files.length ? 'err' : 'warn');
   else if (ok > 1) setF(`uploaded ${ok} files`, 'ok');
   else setF('uploaded', 'ok');

@@ -449,15 +449,44 @@ class PenpadTUI(App):
         paths = self.pending_upload
         self.pending_upload = []
         self._hide_toast()
-        self._set_status("uploading", "warn")
-        ok, fail = 0, 0
+
+        # Batch progress: track bytes across the whole upload.
+        sizes = []
         for p in paths:
+            try:
+                sizes.append(Path(p).stat().st_size)
+            except OSError:
+                sizes.append(0)
+        total_bytes = sum(sizes) or 1
+        sent_before = 0
+
+        ok, fail = 0, 0
+        for p, size in zip(paths, sizes):
             src = Path(p)
             try:
                 data = src.read_bytes()
                 name = quote(src.name, safe="")
-                r = await self.client.put(f"/files/{name}", content=data)
+                chunk_size = 64 * 1024
+                # Local snapshot so the generator captures *this* file's offset.
+                offset = sent_before
+
+                async def chunks():
+                    for i in range(0, len(data), chunk_size):
+                        chunk = data[i : i + chunk_size]
+                        yield chunk
+                        pct = min(
+                            100,
+                            int(100 * (offset + i + len(chunk)) / total_bytes),
+                        )
+                        self._set_status(f"uploading {pct}%", "warn")
+
+                r = await self.client.put(
+                    f"/files/{name}",
+                    content=chunks(),
+                    headers={"Content-Length": str(len(data))},
+                )
                 r.raise_for_status()
+                sent_before += size
                 ok += 1
             except Exception:
                 fail += 1

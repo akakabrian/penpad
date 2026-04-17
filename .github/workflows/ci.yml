@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax:
+    name: syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: compile penpad.py and tui.py (server + TUI)
+        run: python -m py_compile penpad.py tui.py
+      # widget.py imports `gi` (GTK), which we don't install in CI;
+      # parse-check it instead so syntax regressions still fail.
+      - name: parse-check widget.py
+        run: python -c "import ast, sys; ast.parse(open('widget.py').read())"
+
+  imports:
+    name: TUI imports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install -r requirements.txt
+      - run: python -c "import tui; print(tui.PenpadTUI)"

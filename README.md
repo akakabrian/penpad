@@ -6,113 +6,97 @@
 
 **A notes and file sharing app for you and your agents.**
 
-Self-hosted, instant, no accounts. Most of the time, dropping a file
-on one device puts it on another in under a second. The data is a
-single text file plus a single folder on your disk; you can `cat`
-or `rsync` it.
+Self-hosted, instant, no accounts. Drop a file on one of your devices
+and it's on another a beat later. No iCloud, no Apple ecosystem, no
+subscription, no discovery handshake — works between devices AirDrop
+won't even talk to (Linux ↔ iPhone, Android ↔ Mac, headless server ↔
+anything).
 
-One small Python server. Three first-class clients: a PWA (any browser,
-installs to iOS/Android home screen), a Textual TUI, and a GTK desktop
-widget for Linux. **A local AI agent on the same host is a fourth
-client** — it reads and writes the same file and folder directly,
-without any custom API.
+The data is a single text file plus a single folder on your disk; you
+can `cat` or `rsync` it.
+
+<p>
+  <img src="docs/text.png" width="240" alt="text view on iOS"/>
+  <img src="docs/files.png" width="240" alt="files view on iOS"/>
+  <img src="docs/homescreen.jpg" width="240" alt="penpad on the iOS home screen"/>
+</p>
+
+## Why I built it
+
+I have multiple machines, multiple agent harnesses, and I'm constantly
+SSH'd or VNC'd across them to keep certain workspaces isolated. Half
+the time I'm talking to an agent that lives on a different machine
+than the one I'm physically using. Moving a file or pasting text
+between those contexts was death by a thousand cuts: scp this,
+base64-paste-decode that, screenshot-then-rephotograph the other
+thing. penpad is the one place all of them can see.
 
 ## What it is
 
-A shared textarea and a shared folder. That's the whole primitive.
+A shared textarea and a shared folder, served by one small Python
+process. Every client hits the same data:
 
-- **The pad** is a single text file. Edit it from any client; changes
-  land on disk 400 ms after your last keystroke and are visible on
-  every other client a second or two later.
-- **The folder** holds whatever you drop in. Any client can upload,
-  list, preview, download, or delete. Dropping a file in one place
-  makes it appear everywhere else.
+```mermaid
+flowchart TD
+  S["penpad.py server<br/>(stdlib, ~1600 LOC)<br/>penpad.txt + files/"]
+  S --> PWA["PWA<br/>any browser"]
+  S --> TUI["Textual TUI"]
+  S --> W["GTK widget<br/>Linux"]
+  S --> A["local AI agent<br/>(claude-code, ollama, …)"]
+  S --> SH["shell / scripts<br/>cat · rsync · inotify"]
+```
 
-Once you have that primitive running on your own network, the uses
-are open-ended. A few we actually use it for:
+Three first-class GUI clients: a PWA (any browser, installs to
+iOS/Android home screen), a Textual TUI, and a GTK desktop widget for
+Linux. **A local AI agent on the same host is a fourth client** — it
+just reads and writes the same file and folder, no API key, no OAuth,
+no tool-use schema. So is `cat`, `rsync`, `inotifywait`, and any
+script you write.
 
-- **Work alongside a local AI agent.** Claude Code on the penpad host
-  can read and write the same file and folder you can — drop a
-  screenshot from your phone, ask the agent to look at it, get a
-  reply typed back into the pad. No API key, no OAuth, no upload.
-- **Device-to-device file transfer.** Screenshot on your phone →
-  penpad → laptop, in about a second. Replaces AirDrop, the
-  upload-to-Drive-and-share-with-yourself dance, and "email it to
-  myself."
-- **A scratchpad that's actually everywhere.** One textarea across
-  phone, laptop, desktop widget, and tmux. Good for anything you'd
-  previously keep in Apple Notes, a Slack DM to yourself, or a scrap
-  of paper on the desk.
-- **Ad hoc clipboards, dumping grounds, handoff queues, code
-  snippets, TODOs across contexts, debug artifacts between machines,
-  kids' drawing collections, whatever.** It's a shared file and a
-  shared folder; treat it as one. You can even hold a simple
-  back-and-forth with a local agent just by appending lines — no
-  protocol, no schema — though penpad is deliberately not trying to
-  be a chat app.
+## What you'd use it for
 
-### The feel
+- **Hand a file to an agent on another machine.** Drop it; the agent
+  picks it up.
+- **Get a URL or text blob back from an agent.** Same primitive,
+  other direction.
+- **Move a screenshot from your phone to your laptop** — under a
+  second, no AirDrop quirks, works between any platforms.
+- **Park something for yourself** to grab later from any of your
+  devices.
+- **Run a quick back-and-forth** with a local agent by appending
+  lines to the pad — no schema, no protocol. (penpad isn't a chat
+  app; it just happens to fit one in zero LOC.)
 
-Typing saves in the background 400 ms after your last keystroke; every
-other client picks up the new text on its next sync tick (a second or
-two later). There's no "upload" button, no "sync now" indicator, no
-conflict modal — it just behaves like the same textarea is open on
-every device.
+Same shape every direction. Simple, fast, secure.
 
-### No auth, on purpose
+## Mental model: one user, many clients
 
-penpad has no login, no passwords, no OAuth, no captchas. **Security
-is the network itself.** You put penpad on a tailnet (or LAN, or
-VPN), and the thing protecting it is the same thing protecting the
-SSH server and the database next to it: you can't reach the IP from
-outside. Authentication at the network layer means the app stays a
-tiny, friction-free folder instead of a login screen.
+penpad is **deliberately single-user**: one person, many devices, many
+agents, all bound by a tailnet (or LAN, or VPN). No multi-user auth,
+no sharing mode, no ACLs.
 
-It also means every device you add to your tailnet is immediately and
-automatically "logged in." Just open the URL. That's the whole story.
+That single constraint is what lets the whole thing stay tiny and feel
+instant. Security lives at the **network layer** — you put penpad
+somewhere only your stuff can reach, and "open the URL" is the whole
+login. Add a device to your tailnet and it's automatically trusted.
 
-Works across every platform you own because the UI is a web page.
-Works without the internet if your devices can see each other.
+If you want multi-user, encrypted-at-rest, or public-internet
+hosting, use a different tool. penpad is a primitive, not a platform.
 
-## Features
+## How it feels
 
-- **Cross-device file drop.** Drop a file in any client — iPhone PWA,
-  Android PWA, browser, GTK widget, or TUI — and every other device
-  sees it within a couple of seconds. Screenshots, PDFs, photos, logs,
-  whatever.
-- **Type-and-forget autosave.** 400 ms after your last keystroke,
-  your text is on disk. Other clients pick it up on the next poll
-  (~2 s), so everything feels like one shared textarea.
-- **No auth, on purpose.** No passwords, no OAuth, no captchas.
-  Security lives at the network layer — you lock down access by
-  putting penpad on a tailnet / LAN / VPN, and every device on that
-  network is instantly trusted. Open the URL and you're in.
-- **Consistent file actions** across clients: **copy URL / download /
-  delete** available everywhere.
-- **Image thumbnails and inline previews** (text, PDF, JSON) in the
-  web UI; text snippet previews in the TUI.
-- **PWA** — add to Home Screen on iOS / Android, installs as a real
-  icon and acts like a native app.
-- **Textual TUI** with a warm-dark palette, keyboard-first, works
-  great over SSH and inside tmux.
-- **Linux desktop widget** (GTK 3 + WebKit) with drag-and-drop upload
-  and a self-healing watchdog that recovers from wedged drag grabs.
-- **Stdlib-only server.** One `python3 penpad.py` and you're done — no
-  `pip install`, no database.
-- **Agent-friendly.** Pad lives at one flat file, uploads land in one
-  flat directory. Any local AI agent or script can read, write, and
-  `inotify`-watch it directly.
+Typing saves in the background 400 ms after your last keystroke. Other
+clients pick up the new text within ~2 s via an `X-Rev` header poll.
+Uploads stream with a progress bar that tracks the whole batch.
+There's no "save" button, no "sync now" indicator, no conflict modal
+— it just behaves like the same textarea is open on every device.
 
-## Screenshots
+## Requirements
 
-<p>
-  <img src="docs/text.png" width="260" alt="text view on iOS"/>
-  <img src="docs/files.png" width="260" alt="files view on iOS"/>
-  <img src="docs/homescreen.jpg" width="260" alt="penpad on the iOS home screen"/>
-</p>
-
-Left to right: pad view (autosaving), files view (copy / download / delete
-per row), and the PWA installed on the iOS home screen.
+- **Python 3.10+** for the server, TUI, and widget code (uses
+  `str | None` PEP 604 syntax).
+- **Linux + GTK 3 + WebKit2 4.1** for the desktop widget only (the
+  server, web UI, and TUI work anywhere Python does).
 
 ## Quick start
 
@@ -149,7 +133,7 @@ chmod +x ~/.local/bin/penpad
 Run it:
 ```sh
 penpad                                         # local
-NOTEPAD_URL=https://host.example.com penpad    # remote
+PENPAD_URL=https://host.example.com penpad     # remote
 ```
 
 ### Install the widget (Linux / GTK)
@@ -163,37 +147,41 @@ Log out and back in; the widget autostarts in the bottom-right corner.
 Drag files into it to upload. Click it to bring it forward. The minus
 button collapses to a pen-dot; click the pen-dot to expand.
 
+### HTTPS without running a public service
+
+Tailscale Serve gives you a real Let's Encrypt cert on a private
+`*.ts.net` MagicDNS name, reachable only from your tailnet:
+
+```sh
+tailscale serve --bg --https=443 http://localhost:8767
+```
+
 ## Using penpad with AI agents
 
-Agents (Claude Code, Ollama-driven scripts, whatever) read and write
-penpad's data directly — no API keys, no OAuth, no wrapper protocol.
+Agents read and write penpad's data directly. The data is a flat text
+file plus a flat folder, so any local agent (Claude Code, an
+Ollama-driven script, anything with shell access) can just `cat`,
+`echo >>`, and `inotifywait`. No API to wire up.
+
+Three docs ship in the repo so the agent path works out of the box:
 
 - **[AGENTS.md](AGENTS.md)** — universal reference. Locations,
-  conventions, HTTP API, examples. Any agent can read this.
+  conventions, HTTP API, examples. Any LLM-powered agent can read it.
 - **[CLAUDE.md](CLAUDE.md)** — repo-specific instructions for
   `claude-code`. Auto-loaded when Claude Code runs inside the repo.
-- **[.claude/skills/penpad/](.claude/skills/penpad/)** — an installable
-  Claude Code skill that teaches Claude to interact with penpad from
-  any working directory (not just inside the repo):
+- **[.claude/skills/penpad/](.claude/skills/penpad/)** — an
+  installable Claude Code skill that teaches Claude to interact with
+  penpad from any working directory:
 
   ```sh
   mkdir -p ~/.claude/skills
   cp -r .claude/skills/penpad ~/.claude/skills/
   ```
 
-  After that, ask Claude things like "drop this into penpad" or
-  "check what's in my penpad" and it'll use the skill.
+  After that, ask Claude things like "drop this in penpad" or "check
+  what's in my penpad" and it'll use the skill.
 
-Short version: when an agent runs on the penpad host, it's a text file
-and a folder — `cat`, `ls`, `echo >>`, done. When it runs elsewhere on
-your network, same thing through the HTTP API.
-
-## Keybindings
-
-### Web / widget
-Mouse-driven; tabs switch between text and files views.
-
-### TUI
+## TUI keybindings
 
 | key      | action                                  |
 |----------|-----------------------------------------|
@@ -209,27 +197,28 @@ Mouse-driven; tabs switch between text and files views.
 | `^q`     | quit                                    |
 
 Pasting an absolute path (or `file://...`) while the files pane is
-focused prompts to upload. Pastes into the pad go in as text as you'd
-expect.
+focused prompts to upload it. Pastes into the pad go in as text.
 
 ## Configuration
 
 All clients honor a single env var:
 
-| var           | default                  | purpose                |
-|---------------|--------------------------|-------------------------|
-| `NOTEPAD_URL` | `http://127.0.0.1:8767`  | which server to talk to |
+| var          | default                  | purpose                |
+|--------------|--------------------------|------------------------|
+| `PENPAD_URL` | `http://127.0.0.1:8767`  | which server to talk to |
 
-The widget additionally reads (with sensible defaults):
+The widget reads a few extras (with sensible defaults):
 
-| var                 | purpose                                          |
-|---------------------|--------------------------------------------------|
-| `NOTEPAD_ANCHOR`    | corner: `bottom-right` / `bottom-left` / ...     |
-| `NOTEPAD_W`         | widget width in pixels                           |
-| `NOTEPAD_H`         | widget height in pixels                          |
-| `NOTEPAD_COLLAPSED` | collapsed pen-dot diameter                       |
-| `NOTEPAD_MARGIN`    | gap from the screen edge                         |
-| `NOTEPAD_ON_TOP`    | `1` to force keep-above                          |
+| var                | purpose                                          |
+|--------------------|--------------------------------------------------|
+| `PENPAD_ANCHOR`    | corner: `bottom-right` / `bottom-left` / ...     |
+| `PENPAD_W`         | widget width in pixels                           |
+| `PENPAD_H`         | widget height in pixels                          |
+| `PENPAD_COLLAPSED` | collapsed pen-dot diameter                       |
+| `PENPAD_MARGIN`    | gap from the screen edge                         |
+| `PENPAD_ON_TOP`    | `1` to force keep-above                          |
+
+The legacy `NOTEPAD_*` names are still accepted as a fallback.
 
 ## HTTP API
 
@@ -246,54 +235,28 @@ Tiny, stable, easy to script.
 | DELETE | `/files/<name>`            | delete a file                           |
 | POST   | `/upload-uri`              | server-side copy from `file://` URIs (loopback only) |
 
-`GET /content` returns an `X-Rev` header so clients can poll cheaply
-for changes.
+`GET /content` returns an `X-Rev` header; clients poll it cheaply to
+detect changes.
 
-## Security model
+## Security
 
-**This is designed for trusted networks — a LAN, a VPN, or a tailnet.
-Don't expose it to the public internet.** There is no authentication;
-anyone who can reach the port can read, write, and delete.
-
-If you want HTTPS + a real cert without running a public service, one
-easy path is [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve):
-
-```sh
-tailscale serve --bg --https=443 http://localhost:8767
-```
-
-That gets you a real Let's Encrypt cert on your `*.ts.net` MagicDNS
-name, reachable only from your tailnet.
-
-## Architecture
-
-```
-                       ┌──────────────┐
-                       │   penpad.py  │
-                       │ (stdlib HTTP │
-                       │    server)   │
-                       └──────┬───────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-   ┌──────┴──────┐     ┌──────┴──────┐     ┌──────┴──────┐
-   │  web / PWA  │     │  widget.py  │     │   tui.py    │
-   │(any browser)│     │ (GTK/WebKit)│     │ (Textual)   │
-   └─────────────┘     └─────────────┘     └─────────────┘
-```
-
-The server is ~1600 lines of Python stdlib. Text lives in a single file;
-files live in a single directory. Back it up with `rsync`.
+**Designed for trusted networks — a LAN, a VPN, or a tailnet. Don't
+expose it to the public internet.** There is no authentication; anyone
+who can reach the port can read, write, and delete. That's the
+deliberate trade.
 
 ## Contributing
 
-PRs welcome. A few design rules:
+PRs welcome. A few design rules worth knowing:
 
 - The server stays stdlib-only.
-- The three clients share behavior for copy / download / delete /
-  upload. Don't let them drift.
-- The warm-dark palette (see top of `penpad.py` and `tui.tcss`) is the
-  visual identity. Change it on purpose, not by accident.
+- All clients (PWA, widget, TUI) keep the same behavior for **copy
+  URL / download / delete / upload**. Don't let them drift.
+- The warm-dark palette (see top of `penpad.py` and `tui.tcss`) is
+  the project's visual identity. Change it on purpose, not by
+  accident.
+- penpad is single-user by design. Don't add multi-user auth, ACLs,
+  or sharing modes — those belong in a different project.
 
 ## License
 

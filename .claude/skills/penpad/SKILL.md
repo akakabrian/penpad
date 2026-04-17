@@ -8,7 +8,7 @@ description: Interact with the user's penpad instance — a self-hosted shared t
 The user's penpad is a tiny self-hosted app that syncs a single text
 file and a single folder across every device they own. Think "shared
 Notes app, but it's just a file on their disk." Details:
-<https://github.com/brian/penpad> (the user's fork may differ).
+<https://github.com/akakabrian/penpad>.
 
 ## What to do
 

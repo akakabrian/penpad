@@ -4,13 +4,18 @@
 
 # penpad
 
-**Instant file and text syncing across every device you own — and
-every local AI agent running on them.** One tiny Python server, three
-clients: a progressive web app for any browser (desktop, iOS, Android),
-a terminal UI (Textual), and a pinned desktop widget for Linux.
+**A notes and file sharing app for you and your agents.**
 
-No accounts. No cloud. No subscription. Data is a text file and a
-directory on your own disk; you can read it with `cat`.
+Self-hosted, instant, no accounts. Most of the time, dropping a file
+on one device puts it on another in under a second. The data is a
+single text file plus a single folder on your disk; you can `cat`
+or `rsync` it.
+
+One small Python server. Three first-class clients: a PWA (any browser,
+installs to iOS/Android home screen), a Textual TUI, and a GTK desktop
+widget for Linux. **A local AI agent on the same host is a fourth
+client** — it reads and writes the same file and folder directly,
+without any custom API.
 
 ## What it is
 

@@ -60,8 +60,8 @@ script you write does the same.
 - **Get a URL or text blob back** from the agent.
 - **Move a screenshot from phone to laptop** in under a second.
 - **Park something for yourself** to grab later from any device.
-- **Hold a back-and-forth with a local agent** by appending lines.
-  (Not a chat app; just fits one in zero LOC.)
+- **Hold a back-and-forth with a local agent** by appending lines to
+  the pad.
 
 Same shape every direction. Simple, fast, secure.
 
@@ -96,8 +96,9 @@ cd ~/penpad
 python3 penpad.py
 ```
 
-Open `http://<host>:8767/`. Data lives in `~/penpad/penpad.txt` and
-`~/penpad/files/`.
+Open `http://<host>:8767/`. Type in the pad, drop a file, then open
+the same URL on your phone — they all sync. Data lives in
+`~/penpad/penpad.txt` and `~/penpad/files/`.
 
 ### As a systemd user service
 
@@ -113,7 +114,11 @@ systemctl --user enable --now penpad.service
 ```sh
 python3 -m venv ~/penpad/.venv
 ~/penpad/.venv/bin/pip install -r requirements.txt
-printf '#!/usr/bin/env bash\nexec %s/penpad/.venv/bin/python %s/penpad/tui.py "$@"\n' "$HOME" "$HOME" > ~/.local/bin/penpad
+
+cat > ~/.local/bin/penpad <<EOF
+#!/usr/bin/env bash
+exec $HOME/penpad/.venv/bin/python $HOME/penpad/tui.py "\$@"
+EOF
 chmod +x ~/.local/bin/penpad
 ```
 

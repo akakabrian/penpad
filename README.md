@@ -16,9 +16,14 @@ The data is a single text file plus a single folder on your disk; you
 can `cat` or `rsync` it.
 
 <p>
-  <img src="docs/text.png" width="240" alt="text view on iOS"/>
-  <img src="docs/files.png" width="240" alt="files view on iOS"/>
-  <img src="docs/homescreen.jpg" width="240" alt="penpad on the iOS home screen"/>
+  <img src="docs/text.png" width="220" alt="text view on iOS"/>
+  <img src="docs/files.png" width="220" alt="files view on iOS"/>
+  <img src="docs/homescreen.jpg" width="220" alt="penpad on the iOS home screen"/>
+</p>
+<p>
+  <img src="docs/tui-pad.svg" width="48%" alt="penpad TUI — pad view"/>
+  &nbsp;
+  <img src="docs/tui-files.svg" width="48%" alt="penpad TUI — files + preview"/>
 </p>
 
 ## Why I built it

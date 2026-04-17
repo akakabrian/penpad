@@ -1497,14 +1497,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_text(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
         elif self.path == "/manifest.json":
             self._send_text(200, MANIFEST, "application/manifest+json",
-                            {"Cache-Control": "max-age=300"})
+                            {"Cache-Control": "no-store"})
         elif self.path == "/icon.svg":
             self._send_text(200, ICON_SVG, "image/svg+xml",
-                            {"Cache-Control": "max-age=86400"})
+                            {"Cache-Control": "no-store"})
         elif self.path == "/favicon.ico":
             # alias to svg icon
             self._send_text(200, ICON_SVG, "image/svg+xml",
-                            {"Cache-Control": "max-age=86400"})
+                            {"Cache-Control": "no-store"})
         elif self.path == "/content":
             with LOCK:
                 data = DATA_FILE.read_bytes()

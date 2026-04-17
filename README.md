@@ -20,9 +20,9 @@ The data is just a text file and a folder on your disk; `cat`,
   <img src="docs/homescreen.jpg" width="220" alt="penpad on the iOS home screen"/>
 </p>
 <p>
-  <img src="docs/tui-pad.svg" width="48%" alt="penpad TUI — pad view"/>
+  <img src="docs/tui-pad.png" width="48%" alt="penpad TUI — pad view"/>
   &nbsp;
-  <img src="docs/tui-files.svg" width="48%" alt="penpad TUI — files + preview"/>
+  <img src="docs/tui-files.png" width="48%" alt="penpad TUI — files + preview"/>
 </p>
 
 ## Why I built it

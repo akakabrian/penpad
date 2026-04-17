@@ -55,8 +55,10 @@ Three first-class GUI clients: a PWA (any browser, installs to
 iOS/Android home screen), a Textual TUI, and a GTK desktop widget for
 Linux. **A local AI agent on the same host is a fourth client** — it
 just reads and writes the same file and folder, no API key, no OAuth,
-no tool-use schema. So is `cat`, `rsync`, `inotifywait`, and any
-script you write.
+no tool-use schema. The same is true of anything else with filesystem
+access: `cat`, `rsync`, `inotifywait`, a shell script, a cron job.
+penpad's data is just a file and a folder, so anything that can open
+a file is already a client.
 
 ## What you'd use it for
 

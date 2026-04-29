@@ -19,7 +19,11 @@ the data lives, HTTP API, conventions). Everything there applies here.
 
 ## When interacting with penpad data from this session
 
-Pad text is at `./penpad.txt`; files at `./files/`. Filesystem access
-is the simplest route. Conventions in `AGENTS.md` apply — append
-rather than overwrite when you're adding, use `> me:` / `> agent:`
-prefixes if you're sharing the pad with a user in real time.
+Today text is at `./penpad.txt`; Week and Archive rollups are at
+`./penpad.week.txt` and `./penpad.archive.txt`; routed chat is at
+`./penpad.chat.jsonl`; watcher presence is at `./penpad.presence.json`;
+files are at `./files/`. Filesystem access is the simplest route.
+Conventions in `AGENTS.md` apply — append rather than overwrite when
+you're adding, use `> me:` / `> agent:` prefixes if you're sharing the
+pad with a user in real time, and only react to chat messages that
+explicitly mention your configured target.

@@ -33,6 +33,8 @@ PENPAD_URL = (
     or os.environ.get("NOTEPAD_URL")  # backward-compat
     or "http://127.0.0.1:8767"
 )
+__version__ = "0.2.0"
+PENPAD_TOKEN = os.environ.get("PENPAD_TOKEN", "")
 SAVE_DEBOUNCE_S = 0.4
 POLL_INTERVAL_S = 2.0
 NARROW_BREAKPOINT = 90
@@ -114,7 +116,9 @@ class PenpadTUI(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.client = httpx.AsyncClient(base_url=PENPAD_URL, timeout=10.0)
+        headers = {"X-Penpad-Token": PENPAD_TOKEN} if PENPAD_TOKEN else None
+        self.client = httpx.AsyncClient(base_url=PENPAD_URL, timeout=10.0,
+                                        headers=headers)
         await self.load_content()
         await self.load_files()
         self._apply_narrow()
@@ -464,26 +468,30 @@ class PenpadTUI(App):
         for p, size in zip(paths, sizes):
             src = Path(p)
             try:
-                data = src.read_bytes()
                 name = quote(src.name, safe="")
                 chunk_size = 64 * 1024
                 # Local snapshot so the generator captures *this* file's offset.
                 offset = sent_before
 
                 async def chunks():
-                    for i in range(0, len(data), chunk_size):
-                        chunk = data[i : i + chunk_size]
-                        yield chunk
-                        pct = min(
-                            100,
-                            int(100 * (offset + i + len(chunk)) / total_bytes),
-                        )
-                        self._set_status(f"uploading {pct}%", "warn")
+                    sent = 0
+                    with src.open("rb") as f:
+                        while True:
+                            chunk = f.read(chunk_size)
+                            if not chunk:
+                                break
+                            sent += len(chunk)
+                            yield chunk
+                            pct = min(
+                                100,
+                                int(100 * (offset + sent) / total_bytes),
+                            )
+                            self._set_status(f"uploading {pct}%", "warn")
 
                 r = await self.client.put(
                     f"/files/{name}",
                     content=chunks(),
-                    headers={"Content-Length": str(len(data))},
+                    headers={"Content-Length": str(size)},
                 )
                 r.raise_for_status()
                 sent_before += size

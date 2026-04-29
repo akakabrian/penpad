@@ -8,6 +8,7 @@ windows sidesteps that entirely.
 
 Defaults to bottom-right of the primary monitor. Override with env vars:
   PENPAD_URL       (default http://localhost:8767)
+  PENPAD_TOKEN     optional shared token for mutating requests
   PENPAD_W         widget width  (default workarea.width // 3)
   PENPAD_H         widget height (default workarea.height // 2 - margin)
   PENPAD_COLLAPSED collapsed dot size (default 44)
@@ -27,6 +28,8 @@ gi.require_version("WebKit2", "4.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, WebKit2, Gdk, GLib
 
+__version__ = "0.2.0"
+
 def _env(*names, default=None):
     """Return the first set env var among *names* (or default)."""
     for n in names:
@@ -36,6 +39,7 @@ def _env(*names, default=None):
     return default
 
 URL       = _env("PENPAD_URL", "NOTEPAD_URL", default="http://localhost:8767")
+TOKEN     = _env("PENPAD_TOKEN", default="")
 W_ENV     = _env("PENPAD_W", "NOTEPAD_W")
 H_ENV     = _env("PENPAD_H", "NOTEPAD_H")
 COLLAPSED = int(_env("PENPAD_COLLAPSED", "NOTEPAD_COLLAPSED", default="44"))
@@ -241,7 +245,10 @@ def main():
             body = "\n".join(file_uris).encode("utf-8")
             req = urllib.request.Request(
                 URL + "/upload-uri", data=body,
-                headers={"Content-Type": "text/uri-list"},
+                headers={
+                    "Content-Type": "text/uri-list",
+                    **({"X-Penpad-Token": TOKEN} if TOKEN else {}),
+                },
                 method="POST",
             )
             urllib.request.urlopen(req, timeout=10).read()

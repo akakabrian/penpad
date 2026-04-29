@@ -4,14 +4,17 @@
 
 # penpad
 
-**A notes and file sharing app for you and your agents.**
+**Version 0.2.0 — a shared notes, file drop, and agent command room for
+one person with many devices and many local agents.**
 
-Self-hosted, instant, no accounts. Drop a file on one device — it's
-on another a beat later. Works between devices AirDrop won't even
-talk to (Linux ↔ iPhone, Android ↔ Mac, headless server ↔ anything).
-No iCloud, no subscription.
+Self-hosted, instant, no accounts. Penpad gives you an editable Today
+note, automatic Week and Archive rollups, a shared file drop, and an
+append-only chat room where humans and opt-in agent watchers can route
+work with `@machine` / `@agent` mentions. Drop a file on one device and
+it is on another a beat later; send a directed chat message and only the
+matching listener wakes up.
 
-The data is just a text file and a folder on your disk; `cat`,
+The data is just text files and a folder on your disk; `cat`,
 `rsync`, or `git` it however you want.
 
 <p>
@@ -35,12 +38,14 @@ the one place all of them can see.
 
 ## What it is
 
-A shared textarea and a shared folder, served by one small Python
-process.
+A three-page note pad, shared folder, and directed command room served
+by one small Python process. Today is editable; Week and Archive are
+read-only rollups. Files are ordinary files. Chat is append-only JSONL.
+Agents opt in by running a local watcher.
 
 ```mermaid
 flowchart TD
-  S["penpad.py server<br/>(stdlib, ~1600 LOC)<br/>penpad.txt + files/"]
+  S["penpad.py server<br/>(stdlib)<br/>penpad.txt + penpad.week.txt + penpad.archive.txt + files/"]
   S --> PWA["PWA<br/>any browser"]
   S --> TUI["Textual TUI"]
   S --> W["GTK widget<br/>Linux"]
@@ -49,38 +54,65 @@ flowchart TD
 ```
 
 Three GUI clients (PWA, Textual TUI, GTK widget). **A local AI agent
-on the same host is the fourth** — it reads and writes the file and
-folder directly: no API key, no OAuth, no tool-use schema. Any
-script you write does the same.
+on the same host is the fourth** — it can read/write files directly,
+append to Today over HTTP, or listen for routed chat messages. No API
+key, no OAuth, no tool-use schema. Any script you write does the same.
+
+## Features
+
+- **Today / Week / Archive notes.** Type only in Today. At midnight,
+  Today rolls into Week. After Sunday, the completed Week rolls into
+  Archive and Week starts clean.
+- **Shared file drop.** Upload from browser, TUI, or widget; preview
+  images, PDFs, media, and wrapped text/Markdown files; download or copy
+  URLs from any device.
+- **Append-first agent workflows.** `POST /append` and direct file
+  access make additive agent replies safer than replacing the whole pad.
+- **Directed chat room.** `@machine` / `@agent` mentions, watcher
+  presence, replies, pins, toggleable reactions, task states, permalinks,
+  and local unread dividers.
+- **Opt-in automation.** `scripts/penpad-agent-watch.py` listens only
+  for matching mentions and can hand message JSON to a local agent
+  harness.
+- **Low-friction sync.** Server-Sent Events wake clients quickly, with
+  polling fallback for simple clients.
+- **Guardrails without accounts.** Optional `PENPAD_TOKEN`, upload/body
+  limits, atomic writes, bounded event streams, and memory-capped chat
+  reads.
 
 ## What you'd use it for
 
 - **Hand a file to an agent on another machine** — drop it; the agent
   picks it up.
+- **Send directed work to a specific machine** — write `@mini run the
+  smoke test`; only listeners for `mini` react.
 - **Get a URL or text blob back** from the agent.
 - **Move a screenshot from phone to laptop** in under a second.
 - **Park something for yourself** to grab later from any device.
-- **Hold a back-and-forth with a local agent** by appending lines to
-  the pad.
+- **Keep daily scratch notes** without manual cleanup; Today, Week, and
+  Archive organize themselves.
 
 Same shape every direction. Simple, fast, secure.
 
 ## Mental model
 
 **Single-user by design**: one person, many devices, many agents, all
-on a tailnet (or LAN, or VPN). No multi-user auth, no sharing, no
-ACLs. That constraint is what keeps it tiny and instant — security
-is the network layer, and "open the URL" is the whole login.
+on a tailnet (or LAN, or VPN). No accounts, no multi-user permissions,
+no ACLs. Optional token auth protects mutating routes if you need an
+extra guardrail, but security is still primarily the network layer.
 
 If you want multi-user, encryption-at-rest, or public hosting, use
 something else. penpad is a primitive, not a platform.
 
 ## How it feels
 
-Typing saves 400 ms after your last keystroke. Other clients pick up
-changes within ~2 s via an `X-Rev` poll. Uploads stream with a batch
-progress bar. No "save" button, no "sync now", no conflict modal —
-it behaves like the same textarea is open on every device.
+Typing in Today saves 400 ms after your last keystroke. Other clients
+pick up note, file, chat, and presence changes through `/events` with
+polling as fallback. At the Sunday-to-Monday midnight rollover, Today
+is appended into Week, then the completed Week is appended into Archive
+and Week starts clean. Uploads run through a FIFO queue with progress.
+Chat messages are append-only and routable with `@machine` / `@agent`
+mentions. No "save" button, no "sync now", no conflict modal.
 
 ## Requirements
 
@@ -96,9 +128,11 @@ cd ~/penpad
 python3 penpad.py
 ```
 
-Open `http://<host>:8767/`. Type in the pad, drop a file, then open
+Open `http://<host>:8767/`. Type in Today, drop a file, then open
 the same URL on your phone — they all sync. Data lives in
-`~/penpad/penpad.txt` and `~/penpad/files/`.
+`~/penpad/penpad.txt`, `~/penpad/penpad.week.txt`,
+`~/penpad/penpad.archive.txt`, `~/penpad/penpad.chat.jsonl`, and
+`~/penpad/files/`.
 
 ### As a systemd user service
 
@@ -136,6 +170,28 @@ cp packaging/penpad-widget.desktop ~/.config/autostart/
 
 Pinned to the bottom-right after next login. Drag files to upload;
 click to raise; minus button → pen-dot, click to expand.
+
+### Agent chat watcher
+
+Chat is a shared command room, but Penpad does not execute work by
+itself. Each machine that should react needs to opt in by running a
+watcher:
+
+```sh
+PENPAD_AGENT=mini python3 scripts/penpad-agent-watch.py --target mini --ack --sse
+```
+
+Messages like `@mini start a branch and run tests` wake only watchers
+whose targets match. By default the watcher prints matching message
+JSON; pass `--exec 'your-local-agent-command'` to hand the message to a
+local agent harness on stdin. Watchers announce presence for `@` mention
+autocomplete, remember their last seen chat id in
+`~/.penpad-agent-watch-<name>.json`, and never execute chat text directly.
+The chat UI also supports replies, pinned messages, toggleable quick reactions, and
+lightweight task states. Slack-style permalinks can be copied from any
+message, and each browser shows a local unread divider until you mark the
+room read. Shared actions are append-only metadata messages rather than
+edits to old chat rows.
 
 ### HTTPS without going public
 
@@ -188,6 +244,10 @@ upload it. Pastes into the pad go in as text.
 | var          | default                  | purpose                 |
 |--------------|--------------------------|-------------------------|
 | `PENPAD_URL` | `http://127.0.0.1:8767`  | which server to talk to |
+| `PENPAD_TOKEN` | unset                  | optional shared token for mutating requests |
+| `PENPAD_MAX_NOTE_MB` | `5`              | maximum `/save` or `/append` body |
+| `PENPAD_MAX_CHAT_KB` | `64`             | maximum chat or presence POST body |
+| `PENPAD_MAX_UPLOAD_MB` | `512`          | maximum uploaded/copied file size |
 
 Widget extras:
 
@@ -206,8 +266,18 @@ Legacy `NOTEPAD_*` names still work as a fallback.
 
 | method | path                       | purpose                                          |
 |--------|----------------------------|--------------------------------------------------|
-| GET    | `/content`                 | read pad text (returns `X-Rev` header)           |
-| POST   | `/save`                    | replace pad text                                 |
+| GET    | `/notes`                   | read Today, Week, and Archive as JSON            |
+| GET    | `/content`                 | read Today text (returns `X-Rev` header)         |
+| GET    | `/content?note=week`       | read Week text                                   |
+| GET    | `/content?note=archive`    | read Archive text                                |
+| POST   | `/save`                    | replace Today text                               |
+| POST   | `/append`                  | append to Today text                             |
+| GET    | `/chat?limit=200`          | read append-only chat messages                   |
+| GET    | `/chat?since=<id>`         | read messages after a known chat id              |
+| POST   | `/chat`                    | append a chat message or metadata event          |
+| GET    | `/presence`                | list currently known agents/watchers             |
+| POST   | `/presence`                | heartbeat a watcher identity and targets         |
+| GET    | `/events`                  | Server-Sent Events for notes/files/chat/presence |
 | GET    | `/files/`                  | list files (JSON)                                |
 | GET    | `/files/<name>`            | fetch a file (supports `Range`)                  |
 | GET    | `/files/<name>?download=1` | force `Content-Disposition: attachment`          |
@@ -218,8 +288,11 @@ Legacy `NOTEPAD_*` names still work as a fallback.
 ## Security
 
 **Designed for trusted networks — a LAN, VPN, or tailnet. Don't
-expose it to the public internet.** No authentication; anyone who
-can reach the port can read, write, and delete. That's the trade.
+expose it to the public internet.** By default there is no login. Set
+`PENPAD_TOKEN` to require `X-Penpad-Token` or `Authorization: Bearer ...`
+on mutating routes (`/save`, `/append`, `/chat`, `/presence`, uploads,
+and deletes). The web app prompts once and stores the token locally; the
+TUI, widget, and watcher read `PENPAD_TOKEN` from the environment.
 
 ## Contributing
 

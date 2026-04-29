@@ -1,5 +1,10 @@
 # Runtime data — these live alongside the code but are not source
 penpad.txt
+penpad.week.txt
+penpad.archive.txt
+penpad.state.json
+penpad.chat.jsonl
+penpad.presence.json
 penpad.log
 notepad.txt
 notepad.log

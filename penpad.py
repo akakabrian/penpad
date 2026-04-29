@@ -1935,12 +1935,13 @@ function chatPermalink(msg){
 }
 
 async function copyChatLink(msg){
-  const ok = await copyToClipboard(chatPermalink(msg));
+  const permalink = chatPermalink(msg);
+  history.replaceState(null, '', '#chat-' + msg.id);
+  const ok = await copyToClipboard(permalink);
   if (ok) {
-    history.replaceState(null, '', '#chat-' + msg.id);
     setStatus('link copied', 'ok');
   } else {
-    setStatus('copy failed', 'err');
+    setStatus('link in URL', 'ok');
   }
 }
 

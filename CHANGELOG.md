@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Derived `/steward` state for task inboxes, file/task links, and
+  deterministic model hook jobs.
+- Chat message metadata for attached files, priority, due dates, and
+  steward safety flags.
+- Watcher presence capabilities and working-directory metadata.
+
+### Changed
+
+- Chat task state events now drive a compact task inbox instead of
+  needing humans to infer state from the message stream.
+- Local `.env` files are ignored for API keys and other secrets.
+
 ## 0.2.0 - 2026-04-29
 
 ### Added

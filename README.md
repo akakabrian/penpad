@@ -71,6 +71,9 @@ key, no OAuth, no tool-use schema. Any script you write does the same.
 - **Directed chat room.** `@machine` / `@agent` mentions, watcher
   presence, replies, pins, toggleable reactions, task states, permalinks,
   and local unread dividers.
+- **Steward-ready state.** `/steward` derives a task inbox, file/task
+  links, presence capabilities, and deterministic model hook jobs from
+  append-only chat, files, and presence.
 - **Opt-in automation.** `scripts/penpad-agent-watch.py` listens only
   for matching mentions and can hand message JSON to a local agent
   harness.
@@ -187,11 +190,24 @@ JSON; pass `--exec 'your-local-agent-command'` to hand the message to a
 local agent harness on stdin. Watchers announce presence for `@` mention
 autocomplete, remember their last seen chat id in
 `~/.penpad-agent-watch-<name>.json`, and never execute chat text directly.
-The chat UI also supports replies, pinned messages, toggleable quick reactions, and
-lightweight task states. Slack-style permalinks can be copied from any
-message, and each browser shows a local unread divider until you mark the
-room read. Shared actions are append-only metadata messages rather than
-edits to old chat rows.
+The chat UI also supports replies, pinned messages, toggleable quick reactions,
+lightweight task states, and a compact task inbox derived from append-only
+events. Slack-style permalinks can be copied from any message, and each browser
+shows a local unread divider until you mark the room read. Shared actions are
+append-only metadata messages rather than edits to old chat rows.
+
+Watcher presence can advertise capabilities and a working directory:
+
+```sh
+PENPAD_AGENT=mini python3 scripts/penpad-agent-watch.py \
+  --target mini --cap browser --cap tests --ack --sse
+```
+
+`GET /steward` returns rebuildable derived state for local steward daemons:
+active tasks, file links, presence records, and deterministic hook jobs such as
+`chat.task.open -> model.extract_task_intent` and
+`file.added -> model.summarize_file`. The model can summarize or propose safe
+metadata; Penpad's notes, files, and chat remain the source of truth.
 
 ### HTTPS without going public
 

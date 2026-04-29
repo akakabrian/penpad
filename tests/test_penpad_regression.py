@@ -192,6 +192,73 @@ class PenpadRegressionTest(unittest.TestCase):
         self.assertEqual(messages[pin["message"]["id"]]["task_id"], root_id)
         self.assertEqual(messages[unpin["message"]["id"]]["kind"], "unpin")
 
+    def test_steward_derives_tasks_hooks_files_and_presence_caps(self) -> None:
+        status, _, payload = self.json_request(
+            "POST", "/presence",
+            {
+                "id": "mini",
+                "host": "box",
+                "targets": ["mini", "agents"],
+                "capabilities": ["browser", "tests", "tests"],
+                "cwd": "/tmp/work",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["agent"]["capabilities"], ["browser", "tests"])
+        self.assertEqual(payload["agent"]["cwd"], "/tmp/work")
+
+        status, _, _ = self.request("PUT", "/files/result.txt", b"artifact")
+        self.assertEqual(status, 201)
+        _, _, root = self.json_request(
+            "POST", "/chat",
+            {
+                "author": "me",
+                "text": "@mini build this file:result.txt",
+                "mentions": ["mini"],
+                "priority": "high",
+                "due": "today",
+                "files": ["result.txt", "../nope", ".env"],
+                "flags": {"needs_model": True, "safe_apply": True},
+            },
+        )
+        root_id = root["message"]["id"]
+        self.assertEqual(root["message"]["files"], ["result.txt"])
+        self.assertEqual(root["message"]["priority"], "high")
+        self.assertEqual(root["message"]["flags"]["needs_model"], True)
+
+        _, _, _ = self.json_request(
+            "POST", "/chat",
+            {
+                "author": "mini",
+                "text": "@me mini working",
+                "kind": "working",
+                "task_id": root_id,
+                "status": "working",
+            },
+        )
+
+        status, _, body = self.request("GET", "/steward")
+        self.assertEqual(status, 200)
+        steward = json.loads(body)
+        self.assertEqual(steward["counts"]["working"], 1)
+        self.assertIn("observe", steward["modes"])
+
+        task = steward["tasks"][0]
+        self.assertEqual(task["id"], root_id)
+        self.assertEqual(task["status"], "working")
+        self.assertEqual(task["assignee"], "mini")
+        self.assertEqual(task["priority"], "high")
+        self.assertEqual(task["files"], ["result.txt"])
+
+        result_file = next(f for f in steward["files"] if f["name"] == "result.txt")
+        self.assertEqual(result_file["linked_tasks"], [root_id])
+        self.assertEqual(result_file["summary_status"], "pending")
+
+        hook_ids = {h["id"] for h in steward["hooks"]}
+        self.assertIn(f"task:{root_id}:intent", hook_ids)
+        self.assertIn("file:result.txt:summary", hook_ids)
+        self.assertEqual(steward["presence"][0]["capabilities"], ["browser", "tests"])
+
     def test_chat_reader_caps_memory_to_requested_limit(self) -> None:
         with penpad.CHAT_FILE.open("w", encoding="utf-8") as f:
             for i in range(1500):

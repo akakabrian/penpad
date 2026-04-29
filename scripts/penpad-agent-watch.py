@@ -51,15 +51,19 @@ def post_chat(url: str, author: str, text: str, token: str | None,
 
 
 def post_presence(url: str, identity: str, targets: set[str], token: str | None,
-                  status: str) -> None:
-    body = json.dumps({
+                  status: str, capabilities: list[str], cwd: str | None) -> None:
+    payload = {
         "id": identity,
         "name": identity,
         "host": socket.gethostname().split(".")[0],
         "role": "agent",
         "status": status,
         "targets": sorted(targets),
-    }).encode("utf-8")
+        "capabilities": capabilities,
+    }
+    if cwd is not None:
+        payload["cwd"] = cwd
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url.rstrip("/") + "/presence",
         data=body,
@@ -110,6 +114,18 @@ def matches(msg: dict, targets: set[str]) -> bool:
     return bool(mentions & targets)
 
 
+def normalize_capabilities(values: list[str]) -> list[str]:
+    capabilities: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        value = value.strip()
+        if not value or value in seen:
+            continue
+        capabilities.append(value)
+        seen.add(value)
+    return capabilities
+
+
 def process_messages(messages: list[dict], targets: set[str], args, last_id: str | None) -> str | None:
     if messages:
         last_id = messages[-1].get("id", last_id)
@@ -140,6 +156,12 @@ def main() -> int:
                    help="Mention this watcher should react to. Defaults to identity, hostname, all, agents.")
     p.add_argument("--interval", type=float, default=2.0)
     p.add_argument("--status", default="listening")
+    p.add_argument("--capability", "--cap", action="append", default=[],
+                   help="Capability to advertise in presence metadata. May be repeated.")
+    p.add_argument("--cwd", default=os.getcwd(),
+                   help="Working directory to advertise in presence metadata. Defaults to the current directory.")
+    p.add_argument("--no-cwd", action="store_true",
+                   help="Do not advertise a working directory in presence metadata.")
     p.add_argument("--state", default="",
                    help="Path for last-seen state. Defaults to ~/.penpad-agent-watch-<identity>.json")
     p.add_argument("--no-state", action="store_true",
@@ -153,6 +175,9 @@ def main() -> int:
     args = p.parse_args()
 
     targets = {args.identity.lower(), host.lower(), "all", "agents", *[t.lower().lstrip("@") for t in args.target]}
+    args.capabilities = normalize_capabilities(args.capability)
+    if args.no_cwd:
+        args.cwd = None
     if args.no_state:
         args.state_path = Path(os.devnull)
         last_id = None
@@ -170,7 +195,7 @@ def main() -> int:
         now = time.monotonic()
         if now - last_presence < 15:
             return
-        post_presence(args.url, args.identity, targets, args.token, args.status)
+        post_presence(args.url, args.identity, targets, args.token, args.status, args.capabilities, args.cwd)
         last_presence = now
 
     while True:

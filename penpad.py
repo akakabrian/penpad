@@ -51,6 +51,13 @@ NOTE_FILES = {"today": DATA_FILE, "week": WEEK_FILE, "archive": ARCHIVE_FILE}
 NOTE_LABELS = {"today": "Today", "week": "Week (M-Su)", "archive": "Archive"}
 NOTE_COLORS = {"today": "#f5c842", "week": "#68c3a3", "archive": "#c982d4"}
 MENTION_RE = re.compile(r"(?<!\w)@([A-Za-z0-9_.-]{1,64})")
+TASK_STATUS_KINDS = {"claim", "working", "done", "blocked"}
+TASK_ACTIVE_STATUSES = {"open", "claimed", "working", "blocked"}
+CHAT_DERIVED_KINDS = {
+    "react", "unreact", "pin", "unpin", "attach", "summary", "proposal",
+    "metadata", *TASK_STATUS_KINDS,
+}
+PRIORITY_VALUES = {"low", "normal", "high", "urgent"}
 
 TEXT_EXT = {
     ".txt", ".md", ".markdown", ".log", ".json", ".jsonl", ".ndjson", ".xml",
@@ -664,6 +671,89 @@ PAGE = r"""<!doctype html>
     -webkit-overflow-scrolling: touch;
   }
   #chatPinned.open { display: flex; }
+  #taskBoard {
+    display: none;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--border-subtle);
+    background: rgba(230, 227, 220, 0.025);
+    padding: 10px 14px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  #taskBoard.open { display: flex; }
+  .task-summary {
+    flex: 0 0 auto;
+    display: grid;
+    gap: 3px;
+    min-width: 84px;
+    align-content: center;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .task-summary strong {
+    color: var(--text);
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+  .task-card {
+    flex: 0 0 min(360px, 82vw);
+    display: grid;
+    gap: 7px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(14, 14, 16, 0.56);
+  }
+  .task-card.blocked { border-color: rgba(201, 112, 100, 0.28); }
+  .task-card.working { border-color: rgba(125, 158, 184, 0.28); }
+  .task-card.claimed { border-color: rgba(245, 200, 66, 0.22); }
+  .task-row {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    min-width: 0;
+  }
+  .task-status,
+  .task-target,
+  .task-priority {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .task-status { color: var(--info); background: rgba(125, 158, 184, 0.08); }
+  .task-priority.high,
+  .task-priority.urgent { color: var(--danger); background: rgba(201, 112, 100, 0.08); }
+  .task-title {
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.4;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-actions {
+    display: flex; flex-wrap: wrap; gap: 5px;
+  }
+  .task-actions button {
+    border: 1px solid var(--border);
+    background: rgba(230, 227, 220, 0.05);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .task-actions button:hover { color: var(--text); background: var(--surface-2); }
   .pin-card {
     flex: 0 0 min(320px, 78vw);
     display: grid;
@@ -742,6 +832,33 @@ PAGE = r"""<!doctype html>
     background: rgba(125, 158, 184, 0.10);
     border-radius: 4px;
     padding: 0 2px;
+  }
+  .chat-files {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .chat-file-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border);
+    background: rgba(230, 227, 220, 0.05);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 11px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .chat-file-chip:hover { color: var(--text); background: var(--surface-2); }
+  .chat-file-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-file-chip svg {
+    flex: 0 0 auto;
+    width: 13px; height: 13px;
   }
   .chat-reply {
     border-left: 2px solid var(--info);
@@ -1300,6 +1417,7 @@ PAGE = r"""<!doctype html>
 
 <section class="view" data-view="chat">
   <div id="chatPinned"></div>
+  <div id="taskBoard" aria-label="Task inbox"></div>
   <div id="chatList"></div>
   <form id="chatForm">
     <div id="replyBar">
@@ -1346,6 +1464,7 @@ const noteDots = document.querySelectorAll('.note-dot');
 const readShield = document.getElementById('readShield');
 const chatList = document.getElementById('chatList');
 const chatPinned = document.getElementById('chatPinned');
+const taskBoard = document.getElementById('taskBoard');
 const chatForm = document.getElementById('chatForm');
 const chatAuthor = document.getElementById('chatAuthor');
 const chatText = document.getElementById('chatText');
@@ -1367,6 +1486,8 @@ let noteDate = null;
 let serverRev = 0, localDirty = false, saveTimer = null;
 let chatMessages = [];
 let lastChatSig = null;
+let stewardState = {tasks: [], counts: {}, hooks: [], files: []};
+let lastStewardSig = null;
 let presenceRecords = [];
 let lastPresenceSig = null;
 let suggestIndex = 0;
@@ -1757,6 +1878,21 @@ function chatMentions(text){
   return [...new Set([...text.matchAll(/(^|\s)@([A-Za-z0-9_.-]{1,64})/g)].map(m => m[2]))];
 }
 
+function chatFiles(text){
+  const known = new Set(lastItems.map(it => it.name));
+  const out = [];
+  const candidates = [
+    ...text.matchAll(/(?:^|\s)file:([A-Za-z0-9._-]{1,255})/g),
+    ...text.matchAll(/\/files\/([A-Za-z0-9._%+-]{1,255})/g),
+  ].map(m => decodeURIComponent(m[1]));
+  for (const name of candidates){
+    if (/^[A-Za-z0-9._-]{1,255}$/.test(name) && known.has(name) && !out.includes(name)) {
+      out.push(name);
+    }
+  }
+  return out;
+}
+
 function chatTime(ts){
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return '';
@@ -1825,7 +1961,7 @@ function renderChatSuggest(){
     btn.type = 'button';
     btn.className = 'chat-suggest-item' + (i === suggestIndex ? ' active' : '');
     btn.innerHTML = '<span>@' + escapeHtml(rec.id) + '</span><span class="chat-suggest-meta">' +
-      escapeHtml(rec.status || (rec.stale ? 'stale' : 'online')) + '</span>';
+      escapeHtml(presenceMeta(rec)) + '</span>';
     btn.addEventListener('mousedown', e => {
       e.preventDefault();
       insertMention(rec.id);
@@ -1841,7 +1977,8 @@ async function refreshPresence(force){
     if (!r.ok) return;
     const payload = await r.json();
     const agents = payload.agents || [];
-    const sig = agents.map(a => a.id + ':' + a.seen + ':' + a.status).join('|');
+    const sig = agents.map(a => a.id + ':' + a.seen + ':' + a.status + ':' +
+      (a.capabilities || []).join(',') + ':' + (a.cwd || '')).join('|');
     if (!force && sig === lastPresenceSig) return;
     lastPresenceSig = sig;
     presenceRecords = agents;
@@ -1859,7 +1996,8 @@ async function sendChat(payload){
   return r.json();
 }
 
-const CHAT_META_KINDS = new Set(['react', 'unreact', 'pin', 'unpin']);
+const TASK_STATUS_KINDS = new Set(['claim', 'working', 'done', 'blocked']);
+const CHAT_META_KINDS = new Set(['react', 'unreact', 'pin', 'unpin', 'attach', 'summary', 'proposal', 'metadata', ...TASK_STATUS_KINDS]);
 const QUICK_REACTIONS = ['+1', 'seen', 'need-info'];
 
 function baseChatMessages(){
@@ -1875,6 +2013,37 @@ function chatMessageMap(){
 function chatSnippet(msg, len = 90){
   const text = (msg?.text || '').replace(/\s+/g, ' ').trim();
   return text.length > len ? text.slice(0, len - 1) + '…' : text;
+}
+
+function presenceMeta(rec){
+  const bits = [];
+  if (rec.stale) bits.push('stale');
+  else if (rec.status) bits.push(rec.status);
+  if (Array.isArray(rec.capabilities) && rec.capabilities.length) {
+    bits.push(rec.capabilities.slice(0, 3).join('/'));
+  } else if (rec.role) {
+    bits.push(rec.role);
+  }
+  if (rec.host) bits.push(rec.host);
+  return bits.filter(Boolean).join(' · ') || 'online';
+}
+
+function findFileItem(name){
+  return lastItems.find(it => it.name === name) || null;
+}
+
+function chatFileChips(files){
+  if (!Array.isArray(files) || !files.length) return '';
+  const chips = files.slice(0, 8).map(name => {
+    const item = findFileItem(name);
+    const type = item ? fileType(item.name) : null;
+    const icon = TYPE_ICON[type || 'binary'] || TYPE_ICON.binary;
+    const meta = item ? ' · ' + fmtSize(item.size) : '';
+    return '<a class="chat-file-chip" data-file="' + escapeHtml(name) + '" href="/files/' +
+      encodeURIComponent(name) + '"><span class="file-icon">' + icon + '</span><span>' +
+      escapeHtml(name + meta) + '</span></a>';
+  }).join('');
+  return '<div class="chat-files">' + chips + '</div>';
 }
 
 function authorName(){
@@ -1920,6 +2089,60 @@ function pinnedMessages(){
     if (event.kind === 'unpin') pinned.delete(event.task_id);
   }
   return [...pinned.keys()].map(id => messages.get(id)).filter(Boolean);
+}
+
+function activeTasks(){
+  const tasks = Array.isArray(stewardState.tasks) ? stewardState.tasks : [];
+  return tasks.filter(t => ['open', 'claimed', 'working', 'blocked'].includes(t.status));
+}
+
+function renderTaskBoard(){
+  if (!taskBoard) return;
+  const tasks = activeTasks();
+  const counts = stewardState.counts || {};
+  taskBoard.innerHTML = '';
+  taskBoard.classList.toggle('open', tasks.length > 0);
+  if (!tasks.length) return;
+
+  const summary = document.createElement('div');
+  summary.className = 'task-summary';
+  const activeCount = tasks.length;
+  summary.innerHTML = '<strong>' + activeCount + '</strong><span>active</span>' +
+    '<span>' + escapeHtml(String(counts.blocked || 0)) + ' blocked</span>';
+  taskBoard.appendChild(summary);
+
+  const byWeight = {blocked: 0, working: 1, claimed: 2, open: 3};
+  const cards = [...tasks].sort((a, b) => (byWeight[a.status] ?? 9) - (byWeight[b.status] ?? 9));
+  for (const task of cards.slice(0, 8)){
+    const source = chatMessageMap().get(task.id) || task;
+    const card = document.createElement('div');
+    card.className = 'task-card ' + escapeHtml(task.status || 'open');
+    const target = (task.targets && task.targets[0]) || task.target || 'agents';
+    const priority = task.priority || 'normal';
+    card.innerHTML =
+      '<div class="task-row">' +
+        '<span class="task-status">' + escapeHtml(task.status || 'open') + '</span>' +
+        '<span class="task-target">@' + escapeHtml(target) + '</span>' +
+        '<span class="task-priority ' + escapeHtml(priority) + '">' + escapeHtml(priority) + '</span>' +
+      '</div>' +
+      '<div class="task-title">' + escapeHtml(chatSnippet(task, 130)) + '</div>' +
+      '<div class="task-actions"></div>';
+    const actions = card.querySelector('.task-actions');
+    const jump = document.createElement('button');
+    jump.type = 'button';
+    jump.textContent = 'jump';
+    jump.addEventListener('click', () => jumpToChat(task.id));
+    actions.appendChild(jump);
+    for (const action of ['working', 'done', 'blocked']){
+      if (task.status === action) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = action;
+      btn.addEventListener('click', () => postTaskState(source, action));
+      actions.appendChild(btn);
+    }
+    taskBoard.appendChild(card);
+  }
 }
 
 function jumpToChat(id){
@@ -2076,6 +2299,7 @@ async function postTaskState(msg, action){
 function renderChat(){
   if (!chatList) return;
   renderPinned();
+  renderTaskBoard();
   renderReplyBar();
   const messages = baseChatMessages();
   const messageMap = chatMessageMap();
@@ -2117,9 +2341,20 @@ function renderChat(){
         targets +
       '</div>' +
       replyHtml +
-      '<div class="chat-text">' + highlightMentions(msg.text || '') + '</div>';
+      '<div class="chat-text">' + highlightMentions(msg.text || '') + '</div>' +
+      chatFileChips(msg.files || []);
     const replyEl = row.querySelector('.chat-reply');
     if (replyEl) replyEl.addEventListener('click', () => jumpToChat(replied.id));
+    row.querySelectorAll('.chat-file-chip').forEach(chip => {
+      chip.addEventListener('click', e => {
+        const name = chip.dataset.file || '';
+        const item = findFileItem(name);
+        if (item && isPreviewable(item.name)) {
+          e.preventDefault();
+          openPreview(item);
+        }
+      });
+    });
 
     const reactions = reactionSummary(msg.id);
     const reactionRow = document.createElement('div');
@@ -2193,7 +2428,25 @@ async function refreshChat(force){
     chatMessages = messages;
     renderChat();
     refreshPresence(false);
+    refreshSteward(true);
   } catch(e){ /* keep last chat */ }
+}
+
+async function refreshSteward(force){
+  try {
+    const r = await fetch('/steward', {cache:'no-store'});
+    if (!r.ok) throw new Error('steward fetch failed');
+    const payload = await r.json();
+    const sig = JSON.stringify({
+      tasks: (payload.tasks || []).map(t => [t.id, t.status, t.assignee, t.updated_ts, t.files]),
+      hooks: (payload.hooks || []).map(h => h.id),
+      files: (payload.files || []).map(f => [f.name, f.summary_status, f.linked_tasks]),
+    });
+    if (!force && sig === lastStewardSig) return;
+    lastStewardSig = sig;
+    stewardState = payload;
+    renderTaskBoard();
+  } catch(e){ /* steward state is derived; chat remains usable */ }
 }
 
 chatAuthor.value = localStorage.getItem('chatAuthor') || '';
@@ -2232,8 +2485,9 @@ chatForm.addEventListener('submit', async e => {
   if (!text) return;
   const author = currentAuthor();
   const mentions = chatMentions(text);
+  const files = chatFiles(text);
   try {
-    await sendChat({author, text, mentions, reply_to: replyToId || ''});
+    await sendChat({author, text, mentions, files, reply_to: replyToId || ''});
     chatText.value = '';
     replyToId = null;
     renderReplyBar();
@@ -2493,6 +2747,8 @@ async function refreshFiles(force){
     lastFilesSig = sig;
     lastItems = items;
     renderFiles();
+    renderChat();
+    refreshSteward(true);
   } catch(e){ /* keep last view */ }
 }
 
@@ -3114,9 +3370,9 @@ function startEvents(){
     const es = new EventSource('/events');
     es.addEventListener('ready', () => { eventsConnected = true; });
     es.addEventListener('notes', () => pull());
-    es.addEventListener('files', () => refreshFiles(true));
-    es.addEventListener('chat', () => refreshChat(true));
-    es.addEventListener('presence', () => refreshPresence(true));
+    es.addEventListener('files', () => { refreshFiles(true); refreshSteward(true); });
+    es.addEventListener('chat', () => { refreshChat(true); refreshSteward(true); });
+    es.addEventListener('presence', () => { refreshPresence(true); refreshSteward(true); });
     es.onerror = () => { eventsConnected = false; };
   } catch(e){ /* polling remains the fallback */ }
 }
@@ -3128,6 +3384,7 @@ if (isMobile() && getActive().has('text')) activateReadMode();
 pull();
 refreshFiles();
 refreshChat();
+refreshSteward();
 refreshPresence();
 handleChatHash();
 startEvents();
@@ -3292,6 +3549,49 @@ def clean_chat_author(author: object) -> str:
     text = re.sub(r"[^A-Za-z0-9_. -]+", "", text).strip()
     return text[:48] or "anon"
 
+def clean_chat_kind(kind: object) -> str:
+    text = str(kind or "message").strip().lower()
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "-", text).strip("-")
+    return text[:32] or "message"
+
+def clean_chat_file_ref(value: object) -> str | None:
+    name = urllib.parse.unquote(str(value or "")).replace("\x00", "").strip()
+    if not name or name in (".", "..") or name.startswith("."):
+        return None
+    if "/" in name or "\\" in name or len(name) > 255:
+        return None
+    return name
+
+def clean_chat_files(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    files = []
+    for item in value[:20]:
+        name = clean_chat_file_ref(item)
+        if name:
+            files.append(name)
+    return list(dict.fromkeys(files))
+
+def clean_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+def clean_flags(payload: dict) -> dict:
+    flags = {}
+    raw = payload.get("flags")
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            name = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(key).strip().lower()).strip("-")
+            if name:
+                flags[name[:40]] = clean_bool(value)
+    for key in ("needs_model", "needs_user", "safe_apply", "destructive"):
+        if key in payload:
+            flags[key] = clean_bool(payload.get(key))
+    return flags
+
 def chat_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -3340,11 +3640,20 @@ def append_chat_message_locked(payload: dict) -> dict:
         "text": text,
         "mentions": mentions,
         "target": mentions[0] if mentions else "",
-        "kind": str(payload.get("kind") or "message")[:32],
+        "kind": clean_chat_kind(payload.get("kind")),
     }
-    for key in ("task_id", "status", "reply_to"):
+    for key in ("task_id", "status", "reply_to", "due"):
         if payload.get(key):
             msg[key] = str(payload.get(key))[:128]
+    priority = str(payload.get("priority") or "").strip().lower()
+    if priority in PRIORITY_VALUES:
+        msg["priority"] = priority
+    files = clean_chat_files(payload.get("files") or payload.get("attachments"))
+    if files:
+        msg["files"] = files
+    flags = clean_flags(payload)
+    if flags:
+        msg["flags"] = flags
     if payload.get("reaction"):
         reaction = str(payload.get("reaction")).strip()
         reaction = re.sub(r"[^A-Za-z0-9_.+-]+", "-", reaction)[:32].strip("-")
@@ -3363,6 +3672,16 @@ def clean_presence_id(value: object) -> str:
     text = str(value or "").strip().lstrip("@")
     text = re.sub(r"[^A-Za-z0-9_.-]+", "", text)
     return text[:64]
+
+def clean_capabilities(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    caps = []
+    for item in value[:16]:
+        text = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(item).strip().lower()).strip("-")
+        if text:
+            caps.append(text[:40])
+    return list(dict.fromkeys(caps))
 
 def load_presence_locked() -> dict:
     try:
@@ -3390,8 +3709,12 @@ def upsert_presence_locked(payload: dict) -> dict:
         "role": str(payload.get("role") or "agent")[:40],
         "status": str(payload.get("status") or "online")[:40],
         "targets": targets,
+        "capabilities": clean_capabilities(payload.get("capabilities")),
         "seen": chat_now(),
     }
+    cwd = str(payload.get("cwd") or "").strip()
+    if cwd:
+        rec["cwd"] = cwd[:240]
     data = load_presence_locked()
     data[ident.lower()] = rec
     save_presence_locked(data)
@@ -3427,6 +3750,162 @@ def file_rev_locked() -> int:
                 pass
     return rev
 
+def file_items_locked() -> list[dict]:
+    items = []
+    for p in FILES_DIR.iterdir():
+        if p.is_file():
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            items.append({"name": p.name, "size": st.st_size, "mtime": int(st.st_mtime)})
+    return items
+
+def status_from_kind(kind: str) -> str:
+    return "claimed" if kind == "claim" else kind
+
+def is_task_message(msg: dict) -> bool:
+    kind = str(msg.get("kind") or "message")
+    if kind == "task":
+        return True
+    if kind != "message" or msg.get("reply_to"):
+        return False
+    return bool(msg.get("mentions"))
+
+def steward_state_locked(messages: list[dict] | None = None,
+                         files: list[dict] | None = None) -> dict:
+    messages = messages if messages is not None else read_chat_messages_locked(limit=1000)
+    files = files if files is not None else file_items_locked()
+    presence = presence_payload_locked()
+    tasks: dict[str, dict] = {}
+    task_order: list[str] = []
+    task_summaries: set[str] = set()
+    file_summaries: set[str] = set()
+
+    for msg in messages:
+        if not isinstance(msg, dict) or not is_task_message(msg):
+            continue
+        task_id = str(msg.get("id") or "")
+        if not task_id:
+            continue
+        flags = msg.get("flags") if isinstance(msg.get("flags"), dict) else {}
+        task = {
+            "id": task_id,
+            "message_id": task_id,
+            "created_ts": msg.get("ts", ""),
+            "updated_ts": msg.get("ts", ""),
+            "author": msg.get("author", "anon"),
+            "text": msg.get("text", ""),
+            "targets": msg.get("mentions", []) if isinstance(msg.get("mentions"), list) else [],
+            "target": msg.get("target", ""),
+            "status": "open",
+            "assignee": "",
+            "priority": msg.get("priority", "normal"),
+            "due": msg.get("due", ""),
+            "files": msg.get("files", []) if isinstance(msg.get("files"), list) else [],
+            "flags": flags,
+            "needs_model": bool(flags.get("needs_model", True)),
+            "needs_user": bool(flags.get("needs_user", False)),
+            "safe_apply": bool(flags.get("safe_apply", True)),
+            "destructive": bool(flags.get("destructive", False)),
+            "history": [],
+        }
+        tasks[task_id] = task
+        task_order.append(task_id)
+
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        kind = str(msg.get("kind") or "message")
+        task_id = str(msg.get("task_id") or "")
+        if kind == "summary":
+            if task_id:
+                task_summaries.add(task_id)
+            for name in msg.get("files", []) if isinstance(msg.get("files"), list) else []:
+                file_summaries.add(name)
+        if task_id and task_id in tasks:
+            task = tasks[task_id]
+            if kind in TASK_STATUS_KINDS:
+                task["status"] = status_from_kind(kind)
+                task["assignee"] = msg.get("author", "")
+                task["updated_ts"] = msg.get("ts", task.get("updated_ts", ""))
+                task["history"].append({
+                    "id": msg.get("id", ""),
+                    "kind": kind,
+                    "status": task["status"],
+                    "author": msg.get("author", ""),
+                    "ts": msg.get("ts", ""),
+                    "text": msg.get("text", ""),
+                })
+            if kind == "attach" or msg.get("files"):
+                for name in msg.get("files", []) if isinstance(msg.get("files"), list) else []:
+                    if name not in task["files"]:
+                        task["files"].append(name)
+
+    tasks_list = [tasks[task_id] for task_id in task_order if task_id in tasks]
+    counts = {"open": 0, "claimed": 0, "working": 0, "blocked": 0, "done": 0}
+    for task in tasks_list:
+        counts[task["status"]] = counts.get(task["status"], 0) + 1
+
+    linked_by_file: dict[str, list[str]] = {}
+    for task in tasks_list:
+        for name in task.get("files", []):
+            linked_by_file.setdefault(name, []).append(task["id"])
+
+    file_meta = []
+    for item in sorted(files, key=lambda it: it.get("mtime", 0), reverse=True):
+        name = item.get("name", "")
+        file_meta.append({
+            **item,
+            "linked_tasks": linked_by_file.get(name, []),
+            "summary_status": "ready" if name in file_summaries else "pending",
+            "needs_model": name not in file_summaries,
+        })
+
+    hooks = []
+    for task in tasks_list:
+        if task["status"] in TASK_ACTIVE_STATUSES and task.get("needs_model", True):
+            hooks.append({
+                "id": f"task:{task['id']}:intent",
+                "trigger": "chat.task.open",
+                "action": "model.extract_task_intent",
+                "task_id": task["id"],
+                "safe_apply": True,
+                "destructive": False,
+                "idempotency_key": f"task-intent:{task['id']}",
+            })
+        if task["status"] == "done" and task["id"] not in task_summaries:
+            hooks.append({
+                "id": f"task:{task['id']}:closeout",
+                "trigger": "chat.task.done",
+                "action": "model.summarize_task_result",
+                "task_id": task["id"],
+                "safe_apply": True,
+                "destructive": False,
+                "idempotency_key": f"task-closeout:{task['id']}",
+            })
+    for item in file_meta:
+        if item.get("needs_model"):
+            hooks.append({
+                "id": f"file:{item['name']}:summary",
+                "trigger": "file.added",
+                "action": "model.summarize_file",
+                "file": item["name"],
+                "linked_tasks": item.get("linked_tasks", []),
+                "safe_apply": True,
+                "destructive": False,
+                "idempotency_key": f"file-summary:{item['name']}:{item.get('mtime', 0)}:{item.get('size', 0)}",
+            })
+
+    return {
+        "tasks": tasks_list,
+        "counts": counts,
+        "files": file_meta,
+        "hooks": hooks,
+        "presence": presence.get("agents", []),
+        "modes": ["observe", "suggest", "apply-safe"],
+    }
+
 def safe_name(raw: str) -> str | None:
     name = urllib.parse.unquote(raw)
     name = name.replace("\x00", "").strip()
@@ -3445,6 +3924,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Suppress noisy GET /content + /files polls but log everything else.
         msg = fmt % args
         if (" /content" in msg or " /chat" in msg or " /events" in msg
+                or " /steward" in msg
                 or " /presence" in msg
                 or (" /files/" in msg and ('" 200 ' in msg or '" 201 ' in msg or '" 206 ' in msg))
                 or (" /upload-uri " in msg and '" 200 ' in msg)
@@ -3590,13 +4070,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 rev = int(CHAT_FILE.stat().st_mtime_ns)
             self._send_text(200, json.dumps({"messages": messages}), "application/json",
                             {"Cache-Control": "no-store", "X-Rev": str(rev)})
-        elif path == "/files/" or path == "/files":
-            items = []
+        elif path == "/steward":
             with LOCK:
-                for p in FILES_DIR.iterdir():
-                    if p.is_file():
-                        st = p.stat()
-                        items.append({"name": p.name, "size": st.st_size, "mtime": int(st.st_mtime)})
+                messages = read_chat_messages_locked(limit=1000)
+                files = file_items_locked()
+                payload = steward_state_locked(messages, files)
+                rev = max(
+                    int(CHAT_FILE.stat().st_mtime_ns),
+                    file_rev_locked(),
+                    int(PRESENCE_FILE.stat().st_mtime_ns),
+                )
+            self._send_text(200, json.dumps(payload), "application/json",
+                            {"Cache-Control": "no-store", "X-Rev": str(rev)})
+        elif path == "/files/" or path == "/files":
+            with LOCK:
+                items = file_items_locked()
             self._send_text(200, json.dumps(items), "application/json",
                             {"Cache-Control": "no-store"})
         elif path.startswith("/files/"):
